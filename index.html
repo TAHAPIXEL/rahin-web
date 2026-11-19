@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f9e95" />
+  <meta name="description" content="راهین — نقشه، کاوش همه مغازه‌ها و مکان‌ها، ثبت کسب‌وکار و مسیریاب هوشمند فارسی. هر مسیر، یک قدم نزدیک‌تر." />
+  <title>راهین | نقشه و مسیریاب هوشمند فارسی</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+  <link rel="stylesheet" href="/vendor/maplibre-gl.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- صفحه بارگذاری اولیه -->
+  <div id="loadingScreen" class="loading-screen">
+    <div class="ls-logo">
+      <img src="/icons/icon.svg" width="68" height="68" alt="راهین" />
+    </div>
+    <div class="ls-name">راهین</div>
+    <div class="ls-sub">هر مسیر، یک قدم نزدیک‌تر</div>
+    <div class="ls-progress"><div id="lsBar"></div></div>
+    <div id="lsStatus" class="ls-status">در حال بارگذاری نقشه…</div>
+  </div>
+
+  <div id="app" class="app">
+    <!-- بوم نقشه -->
+    <div id="map" class="map" role="application" aria-label="نقشه تعاملی راهین"></div>
+
+    <!-- نوار بالایی: برند + جعبه جستجوی هوشمند -->
+    <header class="topbar">
+      <div class="topbar-inner">
+        <button id="btnBrandMenu" class="brand-btn" title="صفحه اصلی راهین">
+          <span class="brand-mark">🧭</span>
+          <span class="brand-name">راهین</span>
+        </button>
+        <div class="searchbox">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="m20 20-3.5-3.5"></path>
+          </svg>
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="جستجوی مغازه، داروخانه، خیابان، پمپ‌بنزین…"
+            autocomplete="off"
+          />
+          <button id="btnClearSearch" class="icon-btn hidden" title="پاک کردن جستجو" aria-label="پاک کردن">✕</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- بج‌های وضعیت روی نقشه -->
+    <div class="map-badges">
+      <button id="badgeGps" class="badge badge-gps" title="برای تنظیم دقیق موقعیت فعلی خود روی نقشه کلیک کنید">
+        📍 موقعیت من آماده
+      </button>
+      <div id="badgeOffline" class="badge badge-offline" hidden>آفلاین — نقشه ذخیره‌شده</div>
+    </div>
+
+    <!-- دکمه‌های شناور کنترل نقشه -->
+    <div id="mapControls" class="map-controls">
+      <button id="btnLocate" class="fab" title="رفتن به موقعیت فعلی من" aria-label="موقعیت من">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="12" cy="12" r="3.5" fill="currentColor"></circle>
+          <circle cx="12" cy="12" r="8"></circle>
+          <path d="M12 2v2M12 20v2M2 12h2M20 12h2"></path>
+        </svg>
+      </button>
+      <button id="btnAddPlaceFab" class="fab fab-accent" title="ثبت مکان یا مغازه جدید روی نقشه" aria-label="ثبت مکان جدید">
+        ➕
+      </button>
+      <button id="btnCompass" class="fab fab-small" title="شمال نقشه" aria-label="قطب‌نما">
+        <span id="compassNeedle">🧭</span>
+      </button>
+      <button id="btn3D" class="fab fab-small" aria-pressed="false" title="نمای سه‌بعدی">3D</button>
+      <button id="btnLayers" class="fab fab-small" title="لایه‌های نقشه و تنظیم موقعیت">🗂️</button>
+      <button id="btnTheme" class="fab fab-small" title="تغییر حالت روز / شب">🌓</button>
+      <button id="btnProfile" class="fab fab-small" title="حساب کاربری">👤</button>
+    </div>
+
+    <!-- نوار شناور حالت انتخاب نقطه روی نقشه -->
+    <div id="pickBar" class="pickbar hidden">
+      <div class="pickbar-info">
+        <strong id="pickBarTitle">انتخاب مکان روی نقشه</strong>
+        <span id="pickBarSub">روی نقشه ضربه بزنید یا مرکز نقشه را تأیید کنید</span>
+      </div>
+      <div class="pickbar-actions">
+        <button id="btnPickConfirmCenter" class="btn btn-primary">تأیید مرکز نقشه</button>
+        <button id="btnPickCancel" class="btn btn-ghost">انصراف</button>
+      </div>
+    </div>
+
+    <!-- HUD مسیریابی زنده -->
+    <div id="navHud" class="nav-hud hidden">
+      <div class="nav-instruction">
+        <div id="navTurnIcon" class="nav-turn-icon">⬆️</div>
+        <div class="nav-turn-text">
+          <div id="navTurnDist" class="nav-turn-dist">—</div>
+          <div id="navTurnLabel" class="nav-turn-label">در حال آماده‌سازی مسیر…</div>
+          <div id="navTurnStreet" class="nav-turn-street"></div>
+        </div>
+        <button id="btnVoice" class="icon-btn nav-voice" aria-pressed="true" title="راهنمای صوتی">🔊</button>
+      </div>
+      <div class="nav-bottom">
+        <div class="nav-eta">
+          <span id="navEta" class="nav-eta-time">—</span>
+          <span id="navEtaSub" class="nav-eta-sub">مسیریابی فعال</span>
+        </div>
+        <div class="nav-progress"><div id="navProgressFill"></div></div>
+        <div class="nav-nums">
+          <span id="navRemaining">—</span>
+          <span id="navArrival">—</span>
+        </div>
+        <button id="btnStopNav" class="btn btn-danger btn-block">پایان مسیریابی</button>
+      </div>
+    </div>
+
+    <!-- شیت پایینی (Bottom Sheet) -->
+    <section id="sheet" class="sheet" data-state="mid">
+      <div id="sheetHandle" class="sheet-handle" title="تغییر اندازه پنل"><span></span></div>
+      <div id="sheetScroll" class="sheet-scroll">
+        <!-- ۱. نمای خانه -->
+        <div id="viewHome" class="sheet-view">
+          <div id="quickCats" class="quick-cats"></div>
+
+          <div class="home-row">
+            <button id="cardHome" class="home-card">
+              <span class="hc-icon">🏠</span>
+              <span class="hc-label">خانه</span>
+              <span id="homeSub" class="hc-sub">تنظیم نشده</span>
+            </button>
+            <button id="cardWork" class="home-card">
+              <span class="hc-icon">💼</span>
+              <span class="hc-label">محل کار</span>
+              <span id="workSub" class="hc-sub">تنظیم نشده</span>
+            </button>
+            <button id="cardSaved" class="home-card">
+              <span class="hc-icon">⭐</span>
+              <span class="hc-label">ذخیره‌شده‌ها</span>
+              <span id="savedSub" class="hc-sub">۰ مکان</span>
+            </button>
+          </div>
+
+          <div class="home-actions-bar">
+            <button id="cardAddPlaceHome" class="home-card highlight">
+              <span class="hc-icon">➕🏪</span>
+              <span class="hc-label">ثبت مکان / مغازه جدید</span>
+              <span class="hc-sub">افزودن کسب‌وکار روی نقشه</span>
+            </button>
+            <button id="cardReportHome" class="home-card">
+              <span class="hc-icon">⚠️</span>
+              <span class="hc-label">ثبت گزارش مسیر</span>
+              <span class="hc-sub">ترافیک، پلیس، دوربین</span>
+            </button>
+          </div>
+
+          <!-- لیست زنده مغازه‌ها و مکان‌های اطراف در محدوده فعلی نقشه -->
+          <div class="section-head">
+            <h3>🏪 مغازه‌ها و مکان‌های این محدوده نقشه</h3>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span id="nearbyPoisCount" class="small muted"></span>
+              <button id="btnRefreshPois" class="link-btn">بروزرسانی ↻</button>
+            </div>
+          </div>
+          <ul id="nearbyPoisList" class="list"></ul>
+
+          <!-- تاریخچه مسیرهای اخیر -->
+          <div class="section-head">
+            <h3>🕘 مسیرهای اخیر</h3>
+            <button id="btnClearHistory" class="link-btn">پاک کردن</button>
+          </div>
+          <ul id="historyList" class="list"></ul>
+
+          <!-- ابزارهای بیشتر -->
+          <div class="home-actions-bar" style="margin-top:12px">
+            <button id="cardOfflineHome" class="home-card">
+              <span class="hc-icon">📥</span>
+              <span class="hc-label">نقشه آفلاین</span>
+              <span class="hc-sub">دانلود محدوده شهر</span>
+            </button>
+            <button id="cardSettingsHome" class="home-card">
+              <span class="hc-icon">⚙️</span>
+              <span class="hc-label">تنظیمات راهین</span>
+              <span class="hc-sub">صدا، تم و نمایش</span>
+            </button>
+          </div>
+
+          <!-- وضعیت سلامت سرویس‌ها -->
+          <div class="section-head">
+            <h3>📡 وضعیت برخط سرویس‌ها</h3>
+            <button id="btnHealth" class="link-btn">بررسی مجدد</button>
+          </div>
+          <ul id="healthList" class="list health-list"></ul>
+        </div>
+
+        <!-- ۲. نمای نتایج جستجو -->
+        <div id="viewSearch" class="sheet-view hidden">
+          <div class="view-header-row">
+            <h2 class="view-title">نتایج جستجو</h2>
+            <button class="link-btn" data-back-home>بازگشت به خانه ↩</button>
+          </div>
+          <ul id="searchResults" class="list result-list"></ul>
+          <div id="searchEmpty" class="empty hidden">
+            مکانی با این عبارت یافت نشد.<br />
+            <button class="btn btn-primary" style="margin-top:10px" onclick="document.getElementById('cardAddPlaceHome').click()">
+              ➕ ثبت این مکان روی نقشه
+            </button>
+          </div>
+        </div>
+
+        <!-- ۳. نمای کامل مشخصات مکان (مشابه نشان، بلد و گوگل مپ) -->
+        <div id="viewPlace" class="sheet-view hidden">
+          <div class="view-header-row">
+            <button class="link-btn" data-back-home>↩ بازگشت</button>
+            <button class="link-btn" onclick="document.querySelector('[data-place-action=edit]').click()">✏️ ویرایش اطلاعات این مکان</button>
+          </div>
+
+          <div class="place-head">
+            <div id="placeIcon" class="place-icon">📍</div>
+            <div class="place-titles">
+              <h2 id="placeName">مکان انتخابی</h2>
+              <div id="placeNameEn" class="place-name-en hidden"></div>
+              <div class="place-badges-row">
+                <span id="placeCategoryBadge" class="place-cat-badge">مکان شهری</span>
+                <span id="placeRatingBadge" class="place-rating-badge">★ جدید</span>
+                <span id="placeOpenBadge" class="place-status-badge is-muted">🕒 ساعت کاری</span>
+              </div>
+              <p id="placeAddress"></p>
+              <p id="placeMeta" class="place-meta"></p>
+            </div>
+          </div>
+
+          <!-- دکمه‌های عملیاتی سریع -->
+          <div class="action-grid">
+            <button class="action-btn primary-action" data-place-action="route">
+              <span>🧭</span>مسیریابی
+            </button>
+            <button class="action-btn" data-place-action="origin">
+              <span>🚩</span>مبدأ از اینجا
+            </button>
+            <button id="btnPlaceCall" class="action-btn" data-place-action="call">
+              <span>📞</span>تماس
+            </button>
+            <button class="action-btn" data-place-action="save">
+              <span>⭐</span>ذخیره
+            </button>
+            <button class="action-btn" data-place-action="edit">
+              <span>✏️</span>ویرایش
+            </button>
+            <button class="action-btn" data-place-action="share">
+              <span>📤</span>اشتراک
+            </button>
+          </div>
+
+          <!-- مشخصات کامل مکان (آدرس، تلفن، ساعت کاری، وب‌سایت، اینستاگرام، توضیحات) -->
+          <div class="section-head">
+            <h3>📋 مشخصات کامل مکان</h3>
+          </div>
+          <div id="placeDetailsList" class="specs-card"></div>
+
+          <!-- امکانات و ویژگی‌های مکان -->
+          <div class="section-head">
+            <h3>✨ امکانات و خدمات</h3>
+          </div>
+          <div id="placeFeaturesChips" class="features-wrap"></div>
+
+          <!-- نظرات و امتیازهای کاربران -->
+          <div class="section-head">
+            <h3>💬 نظرات و تجربیات کاربران</h3>
+          </div>
+          <div id="placeReviewsBox" class="reviews-box">
+            <div class="review-form">
+              <div class="review-form-row">
+                <input id="reviewAuthorInput" type="text" class="input" placeholder="نام شما (اختیاری)" style="flex:1" />
+                <select id="reviewRatingInput" class="select" style="width:135px">
+                  <option value="5">★★★★★ عالی (۵)</option>
+                  <option value="4">★★★★☆ خوب (۴)</option>
+                  <option value="3">★★★☆☆ متوسط (۳)</option>
+                  <option value="2">★★☆☆☆ ضعیف (۲)</option>
+                  <option value="1">★☆☆☆☆ بد (۱)</option>
+                </select>
+              </div>
+              <div class="review-form-row">
+                <input id="reviewCommentInput" type="text" class="input" placeholder="نظر خود درباره این مکان یا مغازه را بنویسید…" style="flex:1" />
+                <button id="btnSubmitReview" class="btn btn-primary">ثبت نظر</button>
+              </div>
+            </div>
+            <ul id="placeReviewsList" class="list"></ul>
+          </div>
+
+          <!-- هشدارهای اطراف این مکان -->
+          <div class="section-head">
+            <h3>⚠️ وضعیت ترافیکی اطراف</h3>
+            <span id="placeAlertCount" class="small muted"></span>
+          </div>
+          <ul id="placeAlerts" class="list"></ul>
+        </div>
+
+        <!-- ۴. نمای ثبت مکان / مغازه جدید یا ویرایش مشخصات مکان (مشابه نشان و بلد) -->
+        <div id="viewAddplace" class="sheet-view hidden">
+          <div class="view-header-row">
+            <h2 id="addPlaceViewTitle" class="view-title">➕ ثبت مکان جدید روی نقشه</h2>
+            <button id="btnCancelAddPlace" class="link-btn">انصراف ✕</button>
+          </div>
+          <p id="addPlaceSubNote" class="muted small" style="margin-bottom:10px"></p>
+
+          <div class="report-loc">
+            <span>📍 مختصات: <strong id="addPlaceCoordsText" dir="ltr">—</strong></span>
+            <button id="btnPickAddPlaceLoc" class="link-btn">تغییر نقطه روی نقشه 🎯</button>
+          </div>
+
+          <div class="form-grid">
+            <div class="form-row-2">
+              <div class="form-field">
+                <label for="apName">نام فارسی مکان / مغازه *</label>
+                <input id="apName" type="text" class="input" placeholder="مثلاً: سوپرمارکت بهار، داروخانه رازی…" />
+              </div>
+              <div class="form-field">
+                <label for="apNameEn">نام انگلیسی یا برند (اختیاری)</label>
+                <input id="apNameEn" type="text" class="input" dir="ltr" placeholder="e.g. Bahar Market" />
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-field">
+                <label for="apCategory">دسته‌بندی اصلی صنف</label>
+                <select id="apCategory" class="select"></select>
+              </div>
+              <div class="form-field">
+                <label for="apSubcategory">عنوان دقیق صنف / تخصص</label>
+                <input id="apSubcategory" type="text" class="input" placeholder="مثلاً: نانوایی سنگک، دندانپزشکی…" />
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-field">
+                <label for="apCity">شهر</label>
+                <input id="apCity" type="text" class="input" value="تهران" />
+              </div>
+              <div class="form-field">
+                <label for="apDistrict">منطقه / محله</label>
+                <input id="apDistrict" type="text" class="input" placeholder="مثلاً: منطقه ۶، ولیعصر" />
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label for="apAddress">آدرس کامل پستی</label>
+              <input id="apAddress" type="text" class="input" placeholder="خیابان اصلی، خیابان فرعی، کوچه، پلاک…" />
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-field">
+                <label for="apFloorUnit">پلاک / طبقه / واحد</label>
+                <input id="apFloorUnit" type="text" class="input" placeholder="مثلاً: پلاک ۲۴، طبقه همکف، واحد ۲" />
+              </div>
+              <div class="form-field">
+                <label for="apPostalCode">کد پستی ۱۰ رقمی</label>
+                <input id="apPostalCode" type="text" class="input" dir="ltr" placeholder="14155-12345" />
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-field">
+                <label for="apPhone">شماره تلفن تماس</label>
+                <input id="apPhone" type="tel" class="input" dir="ltr" placeholder="021-88000000 / 0912..." />
+              </div>
+              <div class="form-field">
+                <label for="apHours">ساعات کاری</label>
+                <input id="apHours" type="text" class="input" placeholder="مثلاً: شنبه تا پنجشنبه ۸:۰۰ تا ۲۱:۰۰" />
+              </div>
+            </div>
+
+            <div class="preset-chips">
+              <label class="feat-check" style="padding:4px 10px">
+                <input type="checkbox" id="apIs24h" />
+                <span>🟢 شبانه‌روزی (۲۴ ساعته)</span>
+              </label>
+              <button type="button" class="preset-chip" data-hours-preset="همه‌روزه ۰۸:۰۰ تا ۲۲:۰۰">همه‌روزه ۸ تا ۲۲</button>
+              <button type="button" class="preset-chip" data-hours-preset="شنبه تا پنجشنبه ۰۹:۰۰ تا ۲۱:۰۰">شنبه تا پنجشنبه ۹ تا ۲۱</button>
+              <button type="button" class="preset-chip" data-hours-preset="شنبه تا چهارشنبه ۰۸:۰۰ تا ۱۶:۰۰">ساعت اداری ۸ تا ۱۶</button>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-field">
+                <label for="apWebsite">وب‌سایت (اختیاری)</label>
+                <input id="apWebsite" type="url" class="input" dir="ltr" placeholder="https://example.ir" />
+              </div>
+              <div class="form-field">
+                <label for="apInstagram">صفحه اینستاگرام (اختیاری)</label>
+                <input id="apInstagram" type="text" class="input" dir="ltr" placeholder="@shop_handle" />
+              </div>
+            </div>
+
+            <div class="form-field">
+              <label>امکانات و ویژگی‌های این مکان (مشابه نشان و بلد)</label>
+              <div id="apFeaturesGrid" class="features-check-grid"></div>
+            </div>
+
+            <div class="form-field">
+              <label for="apDescription">توضیحات تکمیلی و خدمات ارائه‌شده</label>
+              <textarea id="apDescription" class="textarea" rows="2" placeholder="توضیحات درباره محصولات، خدمات، راهنمای ورودی یا ویژگی‌های خاص…"></textarea>
+            </div>
+
+            <button id="btnSubmitAddPlace" class="btn btn-primary btn-block" style="height:46px;font-size:15px">
+              ✅ ثبت و نمایش فوری روی نقشه راهین
+            </button>
+          </div>
+        </div>
+
+        <!-- ۵. نمای مسیریابی -->
+        <div id="viewRoute" class="sheet-view hidden">
+          <div class="view-header-row">
+            <h2 class="view-title">مسیریابی هوشمند</h2>
+            <button class="link-btn" data-back-home>↩ بازگشت</button>
+          </div>
+
+          <div id="routeModes" class="route-modes"></div>
+
+          <div class="route-points">
+            <div class="route-line-visual">
+              <span class="dot dot-a"></span>
+              <span class="vline"></span>
+              <span class="dot dot-b"></span>
+            </div>
+            <div class="route-inputs">
+              <div id="fieldOrigin" class="field" role="button" tabindex="0">
+                <div class="field-main">
+                  <span class="field-label">مبدأ (برای انتخاب روی نقشه کلیک کنید)</span>
+                  <span id="originValue" class="field-value">موقعیت من</span>
+                </div>
+                <button id="btnUseMyLocOrigin" class="link-btn" title="استفاده از موقعیت من">📍 موقعیت من</button>
+              </div>
+              <div id="fieldDest" class="field" role="button" tabindex="0">
+                <div class="field-main">
+                  <span class="field-label">مقصد (برای انتخاب روی نقشه کلیک کنید)</span>
+                  <span id="destValue" class="field-value">انتخاب مقصد</span>
+                </div>
+                <span class="small muted">🎯 نقشه</span>
+              </div>
+            </div>
+            <button id="btnSwap" class="icon-btn" title="جابه‌جایی مبدأ و مقصد">⇅</button>
+          </div>
+
+          <div id="routeLoading" class="route-loading hidden">
+            <span class="spinner"></span>
+            <span>در حال محاسبه بهترین مسیر از روی خیابان‌های نقشه…</span>
+          </div>
+          <div id="routeError" class="alert-box is-error hidden"></div>
+          <div id="routeCards" class="route-cards"></div>
+
+          <div id="routeStepsBox" class="hidden" style="margin-top:12px">
+            <button id="btnStartNavMain" class="btn btn-primary btn-block" style="margin-bottom:10px;height:46px">
+              🚀 شروع مسیریابی زنده و سخنگو
+            </button>
+            <div class="section-head">
+              <h3>راهنمای گام‌به‌گام مسیر</h3>
+              <span id="stepsCount" class="small muted"></span>
+            </div>
+            <ol id="routeSteps" class="steps"></ol>
+          </div>
+        </div>
+
+        <!-- ۶. نمای ثبت گزارش مسیر -->
+        <div id="viewReport" class="sheet-view hidden">
+          <div class="view-header-row">
+            <h2 class="view-title">ثبت گزارش ترافیکی و جاده‌ای</h2>
+            <button class="link-btn" data-back-home>↩ بازگشت</button>
+          </div>
+          <div id="reportTypes" class="report-types"></div>
+          <div class="report-loc">
+            <span id="reportLocText">مکان: موقعیت فعلی روی نقشه</span>
+            <button id="btnPickReportLoc" class="link-btn">انتخاب از روی نقشه 🎯</button>
+          </div>
+          <textarea id="reportDesc" class="textarea" rows="2" placeholder="توضیحات اختیاری (مثلاً: لاین چپ مسدود است یا سرعت مجاز ۶۰ کیلومتر)…"></textarea>
+          <button id="btnSubmitReport" class="btn btn-primary btn-block" style="margin-top:8px">ثبت گزارش روی نقشه</button>
+        </div>
+
+        <!-- ۷. نمای مکان‌های ذخیره‌شده -->
+        <div id="viewSaved" class="sheet-view hidden">
+          <div class="view-header-row">
+            <h2 class="view-title">مکان‌های ذخیره‌شده</h2>
+            <button class="link-btn" data-back-home>↩ بازگشت</button>
+          </div>
+          <ul id="savedList" class="list"></ul>
+          <div id="savedEmpty" class="empty">هنوز مکانی ذخیره نکرده‌اید</div>
+        </div>
+
+        <!-- ۸. نمای نقشه آفلاین -->
+        <div id="viewOffline" class="sheet-view hidden">
+          <div class="view-header-row">
+            <h2 class="view-title">مدیریت نقشه آفلاین</h2>
+            <button class="link-btn" data-back-home>↩ بازگشت</button>
+          </div>
+          <div class="offline-controls">
+            <div class="small muted">محدوده فعلی نقشه:</div>
+            <div id="offlineBbox" class="offline-bbox">—</div>
+            <label for="offlineZoom" class="small">حداکثر سطح بزرگ‌نمایی (زوم):</label>
+            <select id="offlineZoom" class="select">
+              <option value="12">زوم ۱۲ — شهری کلی (کم‌حجم)</option>
+              <option value="13" selected>زوم ۱۳ — محله‌ها و خیابان‌های اصلی</option>
+              <option value="14">زوم ۱۴ — جزئیات کامل معابر</option>
+            </select>
+            <div id="offlineEstimate" class="offline-estimate">حجم تقریبی: —</div>
+            <div id="offlineProgress" class="progress hidden">
+              <div id="offlineProgressFill"></div>
+              <span id="offlineProgressText">۰%</span>
+            </div>
+            <button id="btnDownloadArea" class="btn btn-primary btn-block">📥 دانلود این محدوده برای حالت آفلاین</button>
+          </div>
+          <div class="section-head">
+            <h3>محدوده‌های دانلودشده</h3>
+            <button id="btnRefreshUsage" class="link-btn">بروزرسانی</button>
+          </div>
+          <ul id="offlineList" class="list"></ul>
+        </div>
+
+        <!-- ۹. نمای تنظیمات -->
+        <div id="viewSettings" class="sheet-view hidden">
+          <div class="view-header-row">
+            <h2 class="view-title">تنظیمات راهین</h2>
+            <button class="link-btn" data-back-home>↩ بازگشت</button>
+          </div>
+
+          <div class="settings-group">
+            <h3>ظاهر و زبان</h3>
+            <div class="setting-row">
+              <span>حالت نمایش نقشه و برنامه</span>
+              <div id="setTheme" class="seg">
+                <button data-v="auto">خودکار</button>
+                <button data-v="light">روز</button>
+                <button data-v="dark">شب</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>زبان راهنما</span>
+              <div id="setLang" class="seg">
+                <button data-v="fa">فارسی</button>
+                <button data-v="en">EN</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>واحد مسافت</span>
+              <div id="setUnits" class="seg">
+                <button data-v="metric">کیلومتر / متر</button>
+                <button data-v="imperial">مایل</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3>مسیریابی و سخنگوی فارسی</h3>
+            <div class="setting-row">
+              <span>شیوه سفر پیش‌فرض</span>
+              <div id="setMode" class="seg">
+                <button data-v="auto">خودرو</button>
+                <button data-v="motorcycle">موتور</button>
+                <button data-v="pedestrian">پیاده</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>راهنمای صوتی فارسی</span>
+              <label class="switch"><input id="setVoice" type="checkbox" checked /><span></span></label>
+            </div>
+            <div class="setting-row">
+              <span>زمان اعلام دستور گردش</span>
+              <div id="setVoiceLead" class="seg">
+                <button data-v="early">زودتر</button>
+                <button data-v="normal">معمولی</button>
+                <button data-v="late">نزدیک پیچ</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <span>آزمایش صدای سخنگو</span>
+              <button id="btnTestVoice" class="btn btn-ghost">🔊 پخش نمونه صدا</button>
+            </div>
+            <div class="setting-row">
+              <span>مسیریابی مجدد خودکار هنگام خروج از مسیر</span>
+              <label class="switch"><input id="setAutoReroute" type="checkbox" checked /><span></span></label>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <h3>هشدارها و حریم خصوصی</h3>
+            <div class="setting-row">
+              <span>هشدار دوربین کنترل سرعت</span>
+              <label class="switch"><input id="setAlertsSpeed" type="checkbox" checked /><span></span></label>
+            </div>
+            <div class="setting-row">
+              <span>هشدار سرعت‌گیر</span>
+              <label class="switch"><input id="setAlertsBump" type="checkbox" checked /><span></span></label>
+            </div>
+            <div class="setting-row">
+              <span>نمایش گزارش‌های مردمی</span>
+              <label class="switch"><input id="setAlertsUser" type="checkbox" checked /><span></span></label>
+            </div>
+            <div class="setting-row">
+              <span>ذخیره تاریخچه مسیرها</span>
+              <label class="switch"><input id="setSaveHistory" type="checkbox" checked /><span></span></label>
+            </div>
+            <div class="setting-row">
+              <span>پاک‌سازی کش کاشی‌های نقشه</span>
+              <button id="btnClearTileCache" class="btn btn-ghost">پاک کردن کش</button>
+            </div>
+          </div>
+
+          <div class="about-box">
+            <div class="about-brand">راهین — نسخه <span id="appVersion">2.0.0</span></div>
+            <div class="small muted">نقشه، اصناف و مسیریاب هوشمند فارسی • <a href="#" id="btnSupport" class="link-btn">درباره و پشتیبانی</a></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- مودال عمومی -->
+    <div id="modal" class="modal hidden">
+      <div id="modalCard" class="modal-card"></div>
+    </div>
+
+    <!-- اعلان (Toast) -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="/vendor/maplibre-gl.js"></script>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

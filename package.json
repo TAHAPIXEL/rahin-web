@@ -1,0 +1,15 @@
+{
+  "name": "rahin-web",
+  "version": "2.0.0",
+  "description": "راهین — نقشه، کاوش مغازه‌ها و مکان‌ها، ثبت کسب‌وکار و مسیریاب هوشمند فارسی",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "echo 'Static + Serverless Functions ready'"
+  }
+}
