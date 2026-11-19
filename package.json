@@ -10,6 +10,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build": "echo 'Static + Serverless Functions ready'"
+    "build": "node scripts/build.cjs",
+    "bundle": "tar -czf rahin-bundle.tar.gz api css fonts icons index.html js manifest.webmanifest sw.js vendor vercel.json"
   }
 }
