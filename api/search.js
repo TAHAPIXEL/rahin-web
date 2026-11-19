@@ -37,6 +37,38 @@ function sendJson(res, status, data, cacheSeconds = 0) {
   res.end(JSON.stringify(data));
 }
 
+// RAHIN — خواندن امن مختصات از پارامترهای URL
+// نکته مهم: Number(null) مقدار 0 می‌دهد، پس پارامتر غایب نباید به اشتباه مختصات (0,0) تلقی شود.
+const DEFAULT_CENTER = { lat: 35.6892, lon: 51.389 };
+
+function parseCoordParam(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function readLatLon(url, { latKeys = ['lat'], lonKeys = ['lon', 'lng'], required = true } = {}) {
+  let lat = null;
+  for (const k of latKeys) {
+    const v = parseCoordParam(url.searchParams.get(k));
+    if (v != null) { lat = v; break; }
+  }
+  let lon = null;
+  for (const k of lonKeys) {
+    const v = parseCoordParam(url.searchParams.get(k));
+    if (v != null) { lon = v; break; }
+  }
+  const valid =
+    Number.isFinite(lat) && Number.isFinite(lon) &&
+    Math.abs(lat) <= 90 && Math.abs(lon) <= 180 &&
+    !(lat === 0 && lon === 0);
+  if (valid) return { lat, lon, valid: true };
+  if (required) return { lat: null, lon: null, valid: false };
+  return { lat: DEFAULT_CENTER.lat, lon: DEFAULT_CENTER.lon, valid: false };
+}
+
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   if (typeof req.body === 'string' && req.body.trim()) {
@@ -281,8 +313,9 @@ module.exports = async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const q = (url.searchParams.get('q') || '').trim();
   const category = (url.searchParams.get('category') || '').trim();
-  const lat = Number(url.searchParams.get('lat'));
-  const lon = Number(url.searchParams.get('lon') ?? url.searchParams.get('lng'));
+  const coords = readLatLon(url, { required: false });
+  const lat = coords.lat;
+  const lon = coords.lon;
   const limit = Math.min(40, Math.max(1, Number(url.searchParams.get('limit')) || 20));
 
   if (q.length < 2 && !category) {
@@ -292,7 +325,7 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  const hasRef = Number.isFinite(lat) && Number.isFinite(lon);
+  const hasRef = coords.valid;
   const refPoint = hasRef ? { lat, lon } : { lat: 35.6892, lon: 51.389 };
 
   // 1. Search Supabase rahin_places

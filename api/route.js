@@ -37,6 +37,38 @@ function sendJson(res, status, data, cacheSeconds = 0) {
   res.end(JSON.stringify(data));
 }
 
+// RAHIN — خواندن امن مختصات از پارامترهای URL
+// نکته مهم: Number(null) مقدار 0 می‌دهد، پس پارامتر غایب نباید به اشتباه مختصات (0,0) تلقی شود.
+const DEFAULT_CENTER = { lat: 35.6892, lon: 51.389 };
+
+function parseCoordParam(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function readLatLon(url, { latKeys = ['lat'], lonKeys = ['lon', 'lng'], required = true } = {}) {
+  let lat = null;
+  for (const k of latKeys) {
+    const v = parseCoordParam(url.searchParams.get(k));
+    if (v != null) { lat = v; break; }
+  }
+  let lon = null;
+  for (const k of lonKeys) {
+    const v = parseCoordParam(url.searchParams.get(k));
+    if (v != null) { lon = v; break; }
+  }
+  const valid =
+    Number.isFinite(lat) && Number.isFinite(lon) &&
+    Math.abs(lat) <= 90 && Math.abs(lon) <= 180 &&
+    !(lat === 0 && lon === 0);
+  if (valid) return { lat, lon, valid: true };
+  if (required) return { lat: null, lon: null, valid: false };
+  return { lat: DEFAULT_CENTER.lat, lon: DEFAULT_CENTER.lon, valid: false };
+}
+
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   if (typeof req.body === 'string' && req.body.trim()) {
@@ -358,10 +390,13 @@ function parseValhallaTrip(trip, provider = 'valhalla') {
       const lenM = Math.round((m.length || 0) * 1000);
       const street = Array.isArray(m.street_names) ? m.street_names.join('، ') : '';
       const labelFa = KIND_LABELS_FA[kind] || 'ادامه مسیر';
+      // دستورهای Valhalla ممکن است انگلیسی یا عربی باشند؛ برای مسیریاب فارسی همیشه دستور فارسی بسازیم
+      const hasPersian = /[\u0600-\u06FF]/.test(String(m.instruction || '')) && !/\b(Drive|Turn|Enter|Exit|Take|Continue|Make|Merge|Your)\b/i.test(String(m.instruction || ''));
+      const faInstruction = street ? `${labelFa} به سمت ${street}` : labelFa;
       maneuvers.push({
         kind,
         label_fa: labelFa,
-        instruction: m.instruction || (street ? `${labelFa} به سمت ${street}` : labelFa),
+        instruction: hasPersian ? m.instruction : faInstruction,
         street_fa: street,
         length_m: lenM,
         time_s: Math.round(m.time || 0),
@@ -470,14 +505,12 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'GET') {
     const url = new URL(req.url, 'http://localhost');
-    const fLat = Number(url.searchParams.get('from_lat') ?? url.searchParams.get('flat'));
-    const fLon = Number(url.searchParams.get('from_lon') ?? url.searchParams.get('flon'));
-    const tLat = Number(url.searchParams.get('to_lat') ?? url.searchParams.get('tlat'));
-    const tLon = Number(url.searchParams.get('to_lon') ?? url.searchParams.get('tlon'));
+    const f = readLatLon(url, { latKeys: ['from_lat', 'flat'], lonKeys: ['from_lon', 'flon'] });
+    const t = readLatLon(url, { latKeys: ['to_lat', 'tlat'], lonKeys: ['to_lon', 'tlon'] });
     mode = url.searchParams.get('mode') || 'auto';
-    if (Number.isFinite(fLat) && Number.isFinite(fLon) && Number.isFinite(tLat) && Number.isFinite(tLon)) {
-      from = { lat: fLat, lon: fLon };
-      to = { lat: tLat, lon: tLon };
+    if (f.valid && t.valid) {
+      from = { lat: f.lat, lon: f.lon };
+      to = { lat: t.lat, lon: t.lon };
     }
   } else {
     const body = await readJsonBody(req);

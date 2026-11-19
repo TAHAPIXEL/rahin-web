@@ -37,6 +37,38 @@ function sendJson(res, status, data, cacheSeconds = 0) {
   res.end(JSON.stringify(data));
 }
 
+// RAHIN — خواندن امن مختصات از پارامترهای URL
+// نکته مهم: Number(null) مقدار 0 می‌دهد، پس پارامتر غایب نباید به اشتباه مختصات (0,0) تلقی شود.
+const DEFAULT_CENTER = { lat: 35.6892, lon: 51.389 };
+
+function parseCoordParam(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function readLatLon(url, { latKeys = ['lat'], lonKeys = ['lon', 'lng'], required = true } = {}) {
+  let lat = null;
+  for (const k of latKeys) {
+    const v = parseCoordParam(url.searchParams.get(k));
+    if (v != null) { lat = v; break; }
+  }
+  let lon = null;
+  for (const k of lonKeys) {
+    const v = parseCoordParam(url.searchParams.get(k));
+    if (v != null) { lon = v; break; }
+  }
+  const valid =
+    Number.isFinite(lat) && Number.isFinite(lon) &&
+    Math.abs(lat) <= 90 && Math.abs(lon) <= 180 &&
+    !(lat === 0 && lon === 0);
+  if (valid) return { lat, lon, valid: true };
+  if (required) return { lat: null, lon: null, valid: false };
+  return { lat: DEFAULT_CENTER.lat, lon: DEFAULT_CENTER.lon, valid: false };
+}
+
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   if (typeof req.body === 'string' && req.body.trim()) {
@@ -448,8 +480,9 @@ module.exports = async function handler(req, res) {
   }
 
   const bboxParam = url.searchParams.get('bbox');
-  const lat = Number(url.searchParams.get('lat') || 35.6892);
-  const lon = Number(url.searchParams.get('lon') ?? url.searchParams.get('lng') ?? 51.389);
+  const coords = readLatLon(url, { required: false });
+  const lat = coords.lat;
+  const lon = coords.lon;
   const category = (url.searchParams.get('category') || '').trim();
   const radius = Math.min(3000, Math.max(250, Number(url.searchParams.get('radius')) || 1200));
 

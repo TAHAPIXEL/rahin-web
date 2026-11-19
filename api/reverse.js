@@ -37,6 +37,38 @@ function sendJson(res, status, data, cacheSeconds = 0) {
   res.end(JSON.stringify(data));
 }
 
+// RAHIN — خواندن امن مختصات از پارامترهای URL
+// نکته مهم: Number(null) مقدار 0 می‌دهد، پس پارامتر غایب نباید به اشتباه مختصات (0,0) تلقی شود.
+const DEFAULT_CENTER = { lat: 35.6892, lon: 51.389 };
+
+function parseCoordParam(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function readLatLon(url, { latKeys = ['lat'], lonKeys = ['lon', 'lng'], required = true } = {}) {
+  let lat = null;
+  for (const k of latKeys) {
+    const v = parseCoordParam(url.searchParams.get(k));
+    if (v != null) { lat = v; break; }
+  }
+  let lon = null;
+  for (const k of lonKeys) {
+    const v = parseCoordParam(url.searchParams.get(k));
+    if (v != null) { lon = v; break; }
+  }
+  const valid =
+    Number.isFinite(lat) && Number.isFinite(lon) &&
+    Math.abs(lat) <= 90 && Math.abs(lon) <= 180 &&
+    !(lat === 0 && lon === 0);
+  if (valid) return { lat, lon, valid: true };
+  if (required) return { lat: null, lon: null, valid: false };
+  return { lat: DEFAULT_CENTER.lat, lon: DEFAULT_CENTER.lon, valid: false };
+}
+
 async function readJsonBody(req) {
   if (req.body && typeof req.body === 'object') return req.body;
   if (typeof req.body === 'string' && req.body.trim()) {
@@ -279,8 +311,9 @@ const FALLBACK_ALERTS = [
 module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return sendJson(res, 200, { ok: true });
   const url = new URL(req.url, 'http://localhost');
-  const lat = Number(url.searchParams.get('lat'));
-  const lon = Number(url.searchParams.get('lon') ?? url.searchParams.get('lng'));
+  const coords = readLatLon(url, { required: true });
+  const lat = coords.lat;
+  const lon = coords.lon;
 
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
     return sendJson(res, 400, {
@@ -322,18 +355,21 @@ module.exports = async function handler(req, res) {
   const names = nominatimData?.namedetails || {};
   const pf = photonData?.features?.[0]?.properties || {};
 
-  const catInfo = classifyOsmTags({
-    amenity: nominatimData?.category === 'amenity' ? nominatimData?.type : pf.osm_value,
-    shop: nominatimData?.category === 'shop' ? nominatimData?.type : (pf.osm_key === 'shop' ? pf.osm_value : ''),
-    tourism: nominatimData?.category === 'tourism' ? nominatimData?.type : '',
-    railway: nominatimData?.category === 'railway' ? nominatimData?.type : '',
-    highway: nominatimData?.category === 'highway' ? nominatimData?.type : '',
-    leisure: nominatimData?.category === 'leisure' ? nominatimData?.type : '',
-    healthcare: extra.healthcare || '',
-    office: nominatimData?.category === 'office' ? nominatimData?.type : '',
-    osm_key: pf.osm_key || nominatimData?.category || '',
-    osm_value: pf.osm_value || nominatimData?.type || '',
-  });
+  // ساخت تگ‌های OSM به‌صورت قطعی: اولویت با Nominatim و در نبود آن Photon
+  // (ترکیب ناهمگون دو منبع باعث دسته‌بندی نادرست مثل «سوپرمارکت» برای ورودی مترو می‌شد)
+  const osmTags = {};
+  if (nominatimData?.category && nominatimData?.type) {
+    osmTags[nominatimData.category] = nominatimData.type;
+  } else if (pf.osm_key && pf.osm_value) {
+    osmTags[pf.osm_key] = pf.osm_value;
+  }
+  if (extra.healthcare) osmTags.healthcare = extra.healthcare;
+  if (extra.amenity && !osmTags.amenity) osmTags.amenity = extra.amenity;
+  if (extra.shop && !osmTags.shop) osmTags.shop = extra.shop;
+  if (extra.railway && !osmTags.railway) osmTags.railway = extra.railway;
+  if (extra.public_transport && !osmTags.public_transport) osmTags.public_transport = extra.public_transport;
+
+  const catInfo = classifyOsmTags(osmTags);
 
   const road = addr.road || addr.pedestrian || addr.Boulevard || pf.street || '';
   const neighbourhood = addr.neighbourhood || addr.suburb || addr.quarter || pf.district || '';
@@ -458,8 +494,8 @@ module.exports = async function handler(req, res) {
     osm: {
       type: nominatimData?.osm_type || pf.osm_type || null,
       id: nominatimData?.osm_id || pf.osm_id || null,
-      key: pf.osm_key || nominatimData?.category || null,
-      value: pf.osm_value || nominatimData?.type || null,
+      key: Object.keys(osmTags).find((k) => k !== 'healthcare') || nominatimData?.category || pf.osm_key || null,
+      value: osmTags[Object.keys(osmTags).find((k) => k !== 'healthcare')] || nominatimData?.type || pf.osm_value || null,
     },
     source: matchedDb ? 'supabase+osm' : 'osm',
     attribution: '© OpenStreetMap contributors (ODbL) • دیتابیس مکان‌های راهین',
