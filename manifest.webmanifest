@@ -1,0 +1,22 @@
+{
+  "name": "راهین — نقشه و مسیریاب هوشمند فارسی",
+  "short_name": "راهین",
+  "description": "نقشه، جستجوی همه مغازه‌ها و مکان‌ها، ثبت کسب‌وکار و مسیریابی هوشمند فارسی. هر مسیر، یک قدم نزدیک‌تر.",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1f2a",
+  "theme_color": "#0f9e95",
+  "categories": ["navigation", "travel", "maps"],
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icons/maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "جستجوی مکان", "url": "/?focus=search", "description": "جستجوی سریع مغازه و آدرس" },
+    { "name": "ثبت مکان جدید", "url": "/?action=add-place", "description": "افزودن مغازه یا مکان روی نقشه" }
+  ]
+}

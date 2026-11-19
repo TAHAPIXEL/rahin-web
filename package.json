@@ -1,0 +1,16 @@
+{
+  "name": "rahin-web",
+  "version": "2.0.0",
+  "description": "راهین — نقشه، کاوش مغازه‌ها و مکان‌ها، ثبت کسب‌وکار و مسیریاب هوشمند فارسی",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "node scripts/build.cjs",
+    "bundle": "tar -czf rahin-bundle.tar.gz api css fonts icons index.html js manifest.webmanifest sw.js vendor vercel.json"
+  }
+}
