@@ -355,10 +355,18 @@ module.exports = async function handler(req, res) {
   const names = nominatimData?.namedetails || {};
   const pf = photonData?.features?.[0]?.properties || {};
 
-  // ساخت تگ‌های OSM به‌صورت قطعی: اولویت با Nominatim و در نبود آن Photon
-  // (ترکیب ناهمگون دو منبع باعث دسته‌بندی نادرست مثل «سوپرمارکت» برای ورودی مترو می‌شد)
+  // انتخاب یک منبع واحد برای نام و دسته‌بندی (Nominatim یا Photon)
+  // ترکیب نام یک منبع با تگ‌های منبع دیگر باعث نتیجه ناهمگون می‌شد
+  // (مثلاً نام «ورودی مترو» با دسته‌بندی «سوپرمارکت»).
+  const GENERIC_OSM_KEYS = new Set(['highway', 'place', 'boundary', 'natural', 'building', 'landuse', 'waterway']);
+  const photonIsPoi =
+    Boolean(pf.osm_key && pf.osm_value) && !GENERIC_OSM_KEYS.has(pf.osm_key) && Boolean(pf.name);
+  const poiSource = photonIsPoi || !(nominatimData?.category && nominatimData?.type) ? 'photon' : 'nominatim';
+
   const osmTags = {};
-  if (nominatimData?.category && nominatimData?.type) {
+  if (poiSource === 'photon' && pf.osm_key && pf.osm_value) {
+    osmTags[pf.osm_key] = pf.osm_value;
+  } else if (nominatimData?.category && nominatimData?.type) {
     osmTags[nominatimData.category] = nominatimData.type;
   } else if (pf.osm_key && pf.osm_value) {
     osmTags[pf.osm_key] = pf.osm_value;
@@ -380,6 +388,7 @@ module.exports = async function handler(req, res) {
 
   const primaryName =
     matchedDb?.name ||
+    (poiSource === 'photon' ? pf.name : null) ||
     names['name:fa'] ||
     nominatimData?.name ||
     pf.name ||
@@ -492,10 +501,11 @@ module.exports = async function handler(req, res) {
     rating_count: ratingCount,
     reviews: Array.isArray(reviews) ? reviews : [],
     osm: {
-      type: nominatimData?.osm_type || pf.osm_type || null,
-      id: nominatimData?.osm_id || pf.osm_id || null,
+      type: (poiSource === 'photon' ? pf.osm_type : nominatimData?.osm_type) || nominatimData?.osm_type || pf.osm_type || null,
+      id: (poiSource === 'photon' ? pf.osm_id : nominatimData?.osm_id) || nominatimData?.osm_id || pf.osm_id || null,
       key: Object.keys(osmTags).find((k) => k !== 'healthcare') || nominatimData?.category || pf.osm_key || null,
       value: osmTags[Object.keys(osmTags).find((k) => k !== 'healthcare')] || nominatimData?.type || pf.osm_value || null,
+      source: poiSource,
     },
     source: matchedDb ? 'supabase+osm' : 'osm',
     attribution: '© OpenStreetMap contributors (ODbL) • دیتابیس مکان‌های راهین',
