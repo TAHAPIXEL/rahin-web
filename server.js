@@ -1,11 +1,11 @@
-import http from 'http';
-import fs from 'fs';
-import path from 'path';
-import { URL, fileURLToPath, pathToFileURL } from 'url';
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const { URL } = require('url');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = '0.0.0.0';
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = __dirname;
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -70,8 +70,7 @@ const server = http.createServer(async (req, res) => {
         if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
           req.body = await readRequestBody(req);
         }
-        const mod = await import(pathToFileURL(apiFile).href);
-        const handler = mod.default || mod;
+        const handler = require(apiFile);
         await handler(req, res);
         return;
       }
